@@ -4,6 +4,9 @@ import torch
 import torchvision.transforms.functional as F
 import os
 
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device('cpu')
+
 def load_dataset(dir):
     paths = []
 
@@ -19,7 +22,7 @@ def load_dataset(dir):
 def transform_img(path):
     img = Image.open(path)
     img = F.to_tensor(img)
-    return torch.unsqueeze(img, dim=0)
+    return torch.unsqueeze(img, dim=0).to(device)
 
 class EarlyStopMonitor(object):
     def __init__(self, max_round, higher_better=True, tolerance=1e-3):
