@@ -3,46 +3,7 @@ import torch
 import numpy as np
 from utils import *
 
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-device = torch.device('cpu')
-
-class Preprocessing(nn.Module):
-    def __init__(self, patch_size, overlapping_ratio):
-        super().__init__()
-        self.kernel = patch_size
-        self.ol_ratio = overlapping_ratio
-        self.target = None
-
-    def slicing(self, img):
-        (h, w) = img.shape[1:]
-        lcm = np.lcm(8, self.kernel)
-        h_cut, w_cut = (h // lcm) * lcm, (w // lcm) * lcm
-        upper_h_cut, left_w_cut = round((h - h_cut) / 2), round((w - w_cut) / 2)
-        img = torch.narrow(img, 1, upper_h_cut, h_cut)
-        img = torch.narrow(img, 2, left_w_cut, w_cut)
-        img = img.unsqueeze(0)
-
-        self.target = img
-
-    def patch_operation(self):
-
-        self.target = self.target.unfold(2, self.kernel, int(self.kernel * self.ol_ratio))
-        self.target = self.target.unfold(3, self.kernel, int(self.kernel * self.ol_ratio))
-
-        patches = torch.empty((self.target.shape[2] * self.target.shape[3], 3, self.kernel, self.kernel))
-        c = 0
-        for i in range(self.target.shape[2]):
-            for j in range(self.target.shape[3]):
-                patches[c] = self.target[:, :, i, j, :]
-                c += 1
-
-        return patches.to(device)
-
-
-    def forward(self, x):
-        self.slicing(x)
-        output = self.patch_operation()
-        return output
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class BasicConv2d(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, **kwargs):
@@ -164,7 +125,7 @@ class CFEN_preprocess(nn.Module):
             x1 = self.first_conv(x1)
 
         for i in range(4):
-            self.second_conv.weight.data = self.second_mask[i].repeat(3, 3, 1, 1).to(device)
+            self.second_conv.weight.data = self.second_mask[i].repeat(3, 3, 1, 1)
             x2 = self.second_conv(x2)
 
         return torch.cat((x1, x2), dim=1)
@@ -198,95 +159,115 @@ class Correlation_Feature_Extraction_Network(nn.Module):
 
         return torch.cat((feature_2, self.Upsampling_2(feature_4), self.Upsampling_4(feature_6)), dim=1)
 
-class SeparableConv2d(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=1, stride=1, padding=0, dilation=1, bias=False):
-        super(SeparableConv2d, self).__init__()
+class SeparableConv(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
 
         self.seperable = nn.Sequential(
-            nn.Conv2d(in_channels, in_channels, kernel_size, stride, padding, dilation, groups=in_channels,
-                               bias=bias),
-            nn.Conv2d(in_channels, out_channels, 1, 1, 0, 1, 1, bias=bias)
+            nn.Conv2d(in_channels, in_channels, 3, stride=1, padding=1, bias=False),
+            nn.Conv2d(in_channels, out_channels, 1, stride=1, padding=0, bias=False)
         )
 
     def forward(self, x):
-        return self.seperable(x)
-
-class Block(nn.Module):
-    def __init__(self, in_filters, out_filters, reps, strides=1, start_with_relu=True, grow_first=True):
-        super(Block, self).__init__()
-
-        if out_filters != in_filters or strides != 1:
-            self.skip = nn.Conv2d(in_filters, out_filters, 1, stride=strides, bias=False)
-            self.skipbn = nn.BatchNorm2d(out_filters)
-        else:
-            self.skip = None
-
-        self.relu = nn.ReLU(inplace=True)
-        rep = []
-
-        filters = in_filters
-        if grow_first:
-            rep.append(self.relu)
-            rep.append(SeparableConv2d(in_filters, out_filters, 3, stride=1, padding=1, bias=False))
-            rep.append(nn.BatchNorm2d(out_filters))
-            filters = out_filters
-
-        for i in range(reps - 1):
-            rep.append(self.relu)
-            rep.append(SeparableConv2d(filters, filters, 3, stride=1, padding=1, bias=False))
-            rep.append(nn.BatchNorm2d(filters))
-
-        if not grow_first:
-            rep.append(self.relu)
-            rep.append(SeparableConv2d(in_filters, out_filters, 3, stride=1, padding=1, bias=False))
-            rep.append(nn.BatchNorm2d(out_filters))
-
-        if not start_with_relu:
-            rep = rep[1:]
-        else:
-            rep[0] = nn.ReLU(inplace=False)
-
-        if strides != 1:
-            rep.append(nn.MaxPool2d(3, strides, 1))
-        self.rep = nn.Sequential(*rep)
-
-    def forward(self, inp):
-        x = self.rep(inp)
-
-        if self.skip is not None:
-            skip = self.skip(inp)
-            skip = self.skipbn(skip)
-        else:
-            skip = inp
-
-        x += skip
+        x = self.seperable(x)
         return x
 
 class Discrimination_Network(nn.Module):
     def __init__(self):
         super().__init__()
 
-        self.SepConvBlock_1 = Block(128, 256, 2, 2, start_with_relu=True, grow_first=True)
-        self.SepConvBlock_2 = Block(256, 728, 2, 2, start_with_relu=True, grow_first=True)
-        self.SepConvBlock_3 = Block(728, 728, 3, 1, start_with_relu=True, grow_first=True)
-        self.SepConvBlock_4 = Block(728, 728, 3, 1, start_with_relu=True, grow_first=True)
+        self.conv1_residual = nn.Sequential(
+            SeparableConv(176, 128),
+            nn.BatchNorm2d(128),
+            nn.ReLU(),
+            SeparableConv(128, 128),
+            nn.BatchNorm2d(128),
+            nn.MaxPool2d(3, stride=2, padding=1)
+        )
+
+        self.conv1_shortcut = nn.Sequential(
+            nn.Conv2d(176, 128, 1, stride=2, padding=0),
+            nn.BatchNorm2d(128)
+        )
+
+        self.conv2_residual = nn.Sequential(
+            nn.ReLU(),
+            SeparableConv(128, 256),
+            nn.BatchNorm2d(256),
+            nn.ReLU(),
+            SeparableConv(256, 256),
+            nn.BatchNorm2d(256),
+            nn.MaxPool2d(3, stride=2, padding=1)
+        )
+
+        self.conv2_shortcut = nn.Sequential(
+            nn.Conv2d(128, 256, 1, stride=2, padding=0),
+            nn.BatchNorm2d(256)
+        )
+
+        self.conv3_residual = nn.Sequential(
+            nn.ReLU(),
+            SeparableConv(256, 728),
+            nn.BatchNorm2d(728),
+            nn.ReLU(),
+            SeparableConv(728, 728),
+            nn.BatchNorm2d(728),
+            nn.MaxPool2d(3, stride=2, padding=1)
+        )
+
+        self.conv3_shortcut = nn.Sequential(
+            nn.Conv2d(256, 728, 1, stride=2, padding=0),
+            nn.BatchNorm2d(728)
+        )
+
+        self.conv4_residual = nn.Sequential(
+            nn.ReLU(),
+            SeparableConv(728, 728),
+            nn.BatchNorm2d(728),
+            nn.ReLU(),
+            SeparableConv(728, 728),
+            nn.BatchNorm2d(728),
+            nn.ReLU(),
+            SeparableConv(728, 728),
+            nn.BatchNorm2d(728)
+        )
+
+        self.conv4_shortcut = nn.Sequential()
+
+        self.GlobalAvgPool = nn.AdaptiveAvgPool2d(1)
+        self.predict_layer = nn.Sequential(
+            nn.Linear(in_features=728, out_features=1),
+            nn.Sigmoid()
+        )
 
     def forward(self, x):
+        # SepConvBlock #1
+        x = self.conv1_residual(x) + self.conv1_shortcut(x)
+        # SepConvBlock #2
+        x = self.conv2_residual(x) + self.conv2_shortcut(x)
+        # SepConvBlock #3
+        x = self.conv3_residual(x) + self.conv3_shortcut(x)
+        # SepConvBlock #4
+        x = self.conv4_residual(x) + self.conv4_shortcut(x)
 
-        return x
+        x = self.GlobalAvgPool(x)
+        x = x.view((-1, x.shape[1]))
+        output = self.predict_layer(x)
+
+        return output
+
 
 class Model(nn.Module):
-    def __init__(self, patch_size, overlapping_ratio):
+    def __init__(self):
         super().__init__()
-        self.Preprocessing = Preprocessing(patch_size, overlapping_ratio)
         self.SIEN = Spatial_Information_Extraction_Network()
         self.CFEN = Correlation_Feature_Extraction_Network()
         self.DN = Discrimination_Network()
 
     def forward(self, x):
-        x = self.Preprocessing(x)
         SIEN_output = self.SIEN(x)
         CFEN_output = self.CFEN(x)
         x = torch.cat((SIEN_output, CFEN_output), dim=1)
-        DN_output = self.DN(x)
+        output = self.DN(x)
+        return output
 
