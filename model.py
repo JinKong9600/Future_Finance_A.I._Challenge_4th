@@ -278,5 +278,5 @@ class Model(nn.Module):
         CFEN_output = self.CFEN(x)
         x = torch.cat((SIEN_output, CFEN_output), dim=1)
         output = self.DN(x)
-        return output
+        return output.squeeze(1)
 
