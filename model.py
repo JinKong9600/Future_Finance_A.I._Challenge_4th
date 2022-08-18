@@ -173,7 +173,7 @@ class SeparableConv(nn.Module):
         return x
 
 class Discrimination_Network(nn.Module):
-    def __init__(self):
+    def __init__(self, num_fc, fc_dim):
         super().__init__()
 
         self.conv1_residual = nn.Sequential(
@@ -235,10 +235,19 @@ class Discrimination_Network(nn.Module):
         self.conv4_shortcut = nn.Sequential()
 
         self.GlobalAvgPool = nn.AdaptiveAvgPool2d(1)
-        self.predict_layer = nn.Sequential(
-            nn.Linear(in_features=728, out_features=1),
-            nn.Sigmoid()
-        )
+        if num_fc == 1:
+            self.predict_layer = nn.Sequential(
+                nn.Linear(in_features=728, out_features=1),
+                nn.Sigmoid()
+            )
+        elif num_fc == 2:
+            self.predict_layer = nn.Sequential(
+                nn.Linear(in_features=728, out_features=fc_dim),
+                nn.Linear(in_features=fc_dim, out_features=1),
+                nn.Sigmoid()
+            )
+        else:
+            raise ValueError('Check Variable <num_fc>')
 
     def forward(self, x):
         # SepConvBlock #1
@@ -258,11 +267,11 @@ class Discrimination_Network(nn.Module):
 
 
 class Model(nn.Module):
-    def __init__(self):
+    def __init__(self, num_fc, fc_dim):
         super().__init__()
         self.SIEN = Spatial_Information_Extraction_Network()
         self.CFEN = Correlation_Feature_Extraction_Network()
-        self.DN = Discrimination_Network()
+        self.DN = Discrimination_Network(num_fc, fc_dim)
 
     def forward(self, x):
         SIEN_output = self.SIEN(x)
