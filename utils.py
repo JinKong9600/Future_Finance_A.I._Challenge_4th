@@ -3,6 +3,7 @@ from PIL import Image
 import torch
 import torchvision.transforms.functional as F
 import os
+import math
 import xml.etree.ElementTree as ET
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -13,7 +14,7 @@ def random_shuffle(a, b):
 
     return a[indices], b[indices]
 
-def class_balancing(p, l):
+def class_balancing(len_p, l, batch):
     l = l.cpu().numpy()
     if 0.5 < np.mean(l):
         major = np.where(l == 1)[0]
@@ -21,11 +22,25 @@ def class_balancing(p, l):
     else:
         major = np.where(l == 0)[0]
         minor = np.where(l == 1)[0]
-    assert len(major) + len(minor) == len(p)
+    assert len(major) + len(minor) == len_p
 
     major = np.random.choice(major, len(minor), replace=False)
+    patch_indices = np.hstack((major, minor))
+    np.random.shuffle(patch_indices)
 
-    return np.hstack((major, minor))
+    recur = True
+    while recur:
+        recur = False
+        np.random.shuffle(patch_indices)
+        temp = l[patch_indices]
+
+        for k in range(math.ceil(len(temp) / batch)):
+            s_idx = k * batch
+            e_idx = min(len(temp) - 1, s_idx + batch)
+            if not (0 < temp[s_idx:e_idx].mean() < 1):
+                recur = True
+                break
+    return patch_indices
 
 def load_dataset(mode):
     paths = []
@@ -85,7 +100,7 @@ def load_dataset(mode):
 def transform_img(path, f_box, patch_size, overlapping_ratio):
     img = Image.open(path)
     img = F.to_tensor(img)
-
+    img.to(device)
     (h, w) = img.shape[1:]
     kernel_size = int(np.lcm(8, patch_size))
     stride = int(kernel_size * overlapping_ratio)
@@ -106,9 +121,9 @@ def transform_img(path, f_box, patch_size, overlapping_ratio):
     patches = img.unfold(2, kernel_size, int(patch_size*overlapping_ratio))\
         .unfold(3, kernel_size, int(kernel_size*overlapping_ratio))
 
-    overlapping_patches = torch.empty((patches.shape[2]*patches.shape[3], 3, kernel_size, kernel_size))
-    patch_labels_map = torch.zeros((img.shape[2], img.shape[3]))
-    patch_labels = torch.zeros((patches.shape[2]*patches.shape[3]), dtype=torch.float)
+    overlapping_patches = torch.empty((patches.shape[2]*patches.shape[3], 3, kernel_size, kernel_size), device=device)
+    patch_labels_map = torch.zeros((img.shape[2], img.shape[3]), device=device)
+    patch_labels = torch.zeros((patches.shape[2]*patches.shape[3]), dtype=torch.float, device=device)
 
     for x, y, h, w in f_box:
         patch_labels_map[x:x+h, y:y+w] = 1
@@ -122,7 +137,7 @@ def transform_img(path, f_box, patch_size, overlapping_ratio):
             patch_labels[c] = sliced_label_map.max()
             c += 1
 
-    return overlapping_patches.to(device), patch_labels.to(device)
+    return overlapping_patches, patch_labels
 
 class EarlyStopMonitor(object):
     def __init__(self, max_round, higher_better=True, tolerance=1e-3):
