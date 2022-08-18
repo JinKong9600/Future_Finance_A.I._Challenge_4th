@@ -68,10 +68,9 @@ def eval_one_epoch(model, val_images, val_forgery_box, data_saving):
         if not labels.sum():
             continue
 
-        patch_indices = class_balancing(patches, labels)
+        patch_indices = class_balancing(len(patches), labels, BATCH_SIZE)
         num_instance = len(patch_indices)
         num_batch = math.ceil(num_instance / BATCH_SIZE)
-        np.random.shuffle(patch_indices)
 
         id_l.append(img_p)
         patch_l.append(labels[patch_indices].cpu().numpy())
@@ -84,20 +83,20 @@ def eval_one_epoch(model, val_images, val_forgery_box, data_saving):
             target_patches = patches[patch_cut]
             target_labels = labels[patch_cut]
 
-            pred_prob = model(target_patches).cpu().numpy()
+            pred_prob = model(target_patches).cpu().detach().numpy()
             pred_label = pred_prob > 0.5
-            true_label = target_labels
+            true_label = target_labels.cpu().numpy()
 
             acc.append((pred_label == true_label).mean())
             ap.append(average_precision_score(true_label, pred_prob))
             f1.append(f1_score(true_label, pred_label))
-            # auc.append(roc_auc_score(true_label, pred_prob))
+            auc.append(roc_auc_score(true_label, pred_prob))
             recall.append(recall_score(true_label, pred_label))
 
     ACC = np.mean(acc)
     AP = np.mean(ap)
     F1 = np.mean(f1)
-    # AUC = np.mean(auc)
+    AUC = np.mean(auc)
     RECALL = np.mean(recall)
 
 
@@ -106,7 +105,7 @@ def eval_one_epoch(model, val_images, val_forgery_box, data_saving):
                 'FC_DIM': FC_DIM,
                 'NUM_GRAPH': len(id_l),
                 'ACCURACY': ACC,
-                # 'AUC_ROC_SCORE': AUC,
+                'AUC_ROC_SCORE': AUC,
                 'AP_SCORE': AP,
                 'RECALL_SCORE': RECALL,
                 'F1_SCORE': F1}]
@@ -120,7 +119,7 @@ def eval_one_epoch(model, val_images, val_forgery_box, data_saving):
             new_model.to_csv(MODEL_PERFORMANCE_PATH)
 
 
-    return ACC, AP, F1, RECALL
+    return ACC, AP, F1, AUC, RECALL
 
 
 def run():
@@ -147,10 +146,10 @@ def run():
             if not labels.sum():
                 continue
 
-            patch_indices = class_balancing(patches, labels)
+            patch_indices = class_balancing(len(patches), labels, BATCH_SIZE)
             num_instance = len(patch_indices)
             num_batch = math.ceil(num_instance / BATCH_SIZE)
-            np.random.shuffle(patch_indices)
+
             for k in range(num_batch):
                 s_idx = k * BATCH_SIZE
                 e_idx = min(num_instance - 1, s_idx + BATCH_SIZE)
@@ -166,26 +165,26 @@ def run():
                 optimizer.step()
 
                 with torch.no_grad():
-                    pred_prob = pred_prob.cpu().numpy()
+                    pred_prob = pred_prob.cpu().detach().numpy()
                     pred_label = pred_prob > 0.5
                     true_label = target_labels.cpu().numpy()
                     acc.append((pred_label == true_label).mean())
                     ap.append(average_precision_score(true_label, pred_prob))
                     f1.append(f1_score(true_label, pred_label))
                     m_loss.append(loss.item())
-                    # auc.append(roc_auc_score(true_label, pred_prob))
+                    auc.append(roc_auc_score(true_label, pred_prob))
                     recall.append(recall_score(true_label, pred_label))
 
-        val_acc, val_ap, val_f1, val_recall = eval_one_epoch(model, val_images, val_forgery_box, 1)
+        val_acc, val_ap, val_f1, val_auc, val_recall = eval_one_epoch(model, val_images, val_forgery_box, 1)
         print(f'epoch : {epoch}')
         print(f'Epoch mean loss: {np.mean(m_loss)}')
         print(f'train acc: {np.mean(acc)}, val acc: {val_acc}')
-        # print(f'train auc: {np.mean(auc)}, val auc: {val_auc}')
+        print(f'train auc: {np.mean(auc)}, val auc: {val_auc}')
         print(f'train ap: {np.mean(ap)}, val ap: {val_ap}')
         print(f'train recall: {np.mean(recall)}, val ap: {val_recall}')
         print(f'train f1: {np.mean(f1)}, val f1: {val_f1}')
 
-        if early_stopper.early_stop_check(np.mean(m_loss)):
+        if early_stopper.early_stop_check(val_auc):
             print(f'No improvement over {early_stopper.max_round} epochs, stop training')
             best_epoch = early_stopper.best_epoch
             print(f'Loading the best model at epoch {best_epoch}')
