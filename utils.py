@@ -4,16 +4,13 @@ import torch
 import torchvision.transforms.functional as F
 import os
 
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-device = torch.device('cpu')
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def load_dataset(dir):
     paths = []
 
-    pristine = [os.path.join(dir, '0', f) for f in os.listdir(os.path.join(dir, '0'))
-                if os.path.isfile(os.path.join(dir, '0', f))]
-    forged = [os.path.join(dir, '1', f) for f in os.listdir(os.path.join(dir, '1'))
-              if os.path.isfile(os.path.join(dir, '1', f))]
+    pristine = [os.path.join(dir, '0', f) for f in os.listdir(os.path.join(dir, '0')) if os.path.isfile(os.path.join(dir, '0', f))]
+    forged = [os.path.join(dir, '1', f) for f in os.listdir(os.path.join(dir, '1')) if os.path.isfile(os.path.join(dir, '1', f))]
 
     paths.extend(pristine)
     paths.extend(forged)
@@ -21,11 +18,30 @@ def load_dataset(dir):
 
     return paths, labels
 
-def transform_img(path):
+def transform_img(path, patch_size, overlapping_ratio):
     img = Image.open(path)
     img = F.to_tensor(img)
 
-    return img
+    (h, w) = img.shape[1:]
+    kernel_size = np.lcm(8, patch_size)
+    print(f'ADJUSTED_PATCH_SIZE : {kernel_size} X {kernel_size}')
+    h_cut, w_cut = (h // kernel_size) * kernel_size, (w // kernel_size) * kernel_size
+    upper_h_cut, left_w_cut = round((h-h_cut)/2), round((w-w_cut)/2)
+    img = torch.narrow(img, 1, upper_h_cut, h_cut)
+    img = torch.narrow(img, 2, left_w_cut, w_cut)
+    img = img.unsqueeze(0)
+
+    patches = img.unfold(2, kernel_size, int(patch_size*overlapping_ratio))\
+        .unfold(3, kernel_size, int(kernel_size*overlapping_ratio))
+
+    overlapping_patches = torch.empty((patches.shape[2]*patches.shape[3], 3, kernel_size, kernel_size))
+    c = 0
+    for i in range(patches.shape[2]):
+        for j in range(patches.shape[3]):
+            overlapping_patches[c] = patches[:, :, i, j, :]
+            c += 1
+
+    return overlapping_patches.to(device)
 
 class EarlyStopMonitor(object):
     def __init__(self, max_round, higher_better=True, tolerance=1e-3):
