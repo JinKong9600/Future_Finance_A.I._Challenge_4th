@@ -10,8 +10,10 @@ device = torch.device('cpu')
 def load_dataset(dir):
     paths = []
 
-    pristine = [os.path.join(dir,'0' ,f) for f in os.listdir(os.path.join(dir,'0')) if os.path.isfile(os.path.join(dir,'0', f))]
-    forged = [os.path.join(dir,'1' ,f) for f in os.listdir(os.path.join(dir,'1')) if os.path.isfile(os.path.join(dir,'1', f))]
+    pristine = [os.path.join(dir, '0', f) for f in os.listdir(os.path.join(dir, '0'))
+                if os.path.isfile(os.path.join(dir, '0', f))]
+    forged = [os.path.join(dir, '1', f) for f in os.listdir(os.path.join(dir, '1'))
+              if os.path.isfile(os.path.join(dir, '1', f))]
 
     paths.extend(pristine)
     paths.extend(forged)
@@ -19,7 +21,7 @@ def load_dataset(dir):
 
     return paths, labels
 
-def transform_img(path, patch_size, overlapping_ratio):
+def transform_img(path):
     img = Image.open(path)
     img = F.to_tensor(img)
 
