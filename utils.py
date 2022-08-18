@@ -3,22 +3,75 @@ from PIL import Image
 import torch
 import torchvision.transforms.functional as F
 import os
+import xml.etree.ElementTree as ET
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def load_dataset(dir):
+def random_shuffle(a, b, c):
+    indices = np.arange(len(a))
+    np.random.shuffle(indices)
+    print(len(a))
+    print(len(b))
+    return a[indices], b[indices], c[indices]
+
+def load_dataset(mode):
     paths = []
+    forgery_box = []
+    labels = []
 
-    pristine = [os.path.join(dir, '0', f) for f in os.listdir(os.path.join(dir, '0')) if os.path.isfile(os.path.join(dir, '0', f))]
-    forged = [os.path.join(dir, '1', f) for f in os.listdir(os.path.join(dir, '1')) if os.path.isfile(os.path.join(dir, '1', f))]
+    if mode == 'train':
+        img_ = lambda x: f'./dataset/findit/train/img/{str(x).zfill(3)}.jpg'
+        xml_ = lambda x: f'./dataset/findit/train/xml/{str(x).zfill(3)}.xml'
 
-    paths.extend(pristine)
-    paths.extend(forged)
-    labels = np.concatenate((np.zeros(len(pristine)), (np.ones(len(forged)))))
 
-    return paths, labels
+        for file_num in range(180):
+            bbx = []
+            img_path = img_(file_num)
+            xml_path = xml_(file_num)
+            tree = ET.parse(xml_path)
+            root = tree.getroot()
+            for forgeries in root:
+                h, w, x, y = map(int, forgeries.attrib.values())
+                bbx.append([x, y, h, w])
+            paths.append(img_path)
+            forgery_box.append(bbx)
 
-def transform_img(path, patch_size, overlapping_ratio):
+        assert len(paths) == len(forgery_box)
+        labels = [0]*len(paths)
+
+    elif mode == 'val':
+        img_ = lambda x: f'./dataset/findit/val/img/{x}.jpg'
+        xml_path = f'./dataset/findit/val/labels.xml'
+
+        tree = ET.parse(xml_path)
+        root = tree.getroot()
+        for f in root:
+            id, label = f.attrib.get('id'), f.attrib.get('modified')
+            img_path = img_(id)
+            paths.append(img_path)
+            labels.append(label)
+        assert len(paths) == len(labels)
+        forgery_box = [0]*len(paths)
+
+    elif mode == 'test':
+        img_ = lambda x: f'./dataset/personal_datasets/img/{x}.jpg'
+        xml_path = f'./dataset/personal_datasets/labels.xml'
+
+        tree = ET.parse(xml_path)
+        root = tree.getroot()
+        for f in root:
+            id, label = f.attrib.get('id'), f.attrib.get('modified')
+            img_path = img_(id)
+            paths.append(img_path)
+            labels.append(label)
+        assert len(paths) == len(labels)
+    else:
+        raise ValueError('Check datasets')
+
+    return np.array(paths), np.array(forgery_box, dtype=object), np.array(labels)
+
+
+def transform_img(path, f_box, patch_size, overlapping_ratio):
     img = Image.open(path)
     img = F.to_tensor(img)
 
@@ -40,7 +93,10 @@ def transform_img(path, patch_size, overlapping_ratio):
         for j in range(patches.shape[3]):
             overlapping_patches[c] = patches[:, :, i, j, :]
             c += 1
-
+    patch_labels = torch.zeros((patches.shape[2]*patches.shape[3]))
+    print(overlapping_patches.shape)
+    print(patch_labels.shape)
+    exit()
     return overlapping_patches.to(device)
 
 class EarlyStopMonitor(object):
