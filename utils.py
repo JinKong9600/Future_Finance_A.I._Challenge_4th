@@ -23,25 +23,7 @@ def transform_img(path, patch_size, overlapping_ratio):
     img = Image.open(path)
     img = F.to_tensor(img)
 
-    (h, w) = img.shape[1:]
-    lcm = np.lcm(8, patch_size)
-    h_cut, w_cut = (h//lcm)*lcm, (w//lcm)*lcm
-    upper_h_cut, left_w_cut = round((h-h_cut)/2), round((w-w_cut)/2)
-    img = torch.narrow(img, 1, upper_h_cut, h_cut)
-    img = torch.narrow(img, 2, left_w_cut, w_cut)
-    img = img.unsqueeze(0)
-
-    patches = img.unfold(2, patch_size, int(patch_size*overlapping_ratio))\
-        .unfold(3, patch_size, int(patch_size*overlapping_ratio))
-
-    overlapping_patch = torch.empty((patches.shape[2]*patches.shape[3], 3, patch_size, patch_size))
-    c = 0
-    for i in range(patches.shape[2]):
-        for j in range(patches.shape[3]):
-            overlapping_patch[c] = patches[:, :, i, j, :]
-            c += 1
-
-    return overlapping_patch
+    return img
 
 class EarlyStopMonitor(object):
     def __init__(self, max_round, higher_better=True, tolerance=1e-3):
