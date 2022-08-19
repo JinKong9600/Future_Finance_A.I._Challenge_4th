@@ -26,20 +26,19 @@ def class_balancing(len_p, l, batch):
 
     major = np.random.choice(major, len(minor), replace=False)
     patch_indices = np.hstack((major, minor))
-    np.random.shuffle(patch_indices)
 
     recur = True
     while recur:
-        recur = False
         np.random.shuffle(patch_indices)
         temp = l[patch_indices]
 
         for k in range(math.ceil(len(temp) / batch)):
             s_idx = k * batch
-            e_idx = min(len(temp) - 1, s_idx + batch)
+            e_idx = min(len(temp), s_idx + batch)
             if not (0 < temp[s_idx:e_idx].mean() < 1):
-                recur = True
                 break
+        else:
+            recur = False
     return patch_indices
 
 def load_dataset(mode):
