@@ -238,16 +238,16 @@ class Discrimination_Network(nn.Module):
         if num_fc == 1:
             self.predict_layer = nn.Sequential(
                 nn.Linear(in_features=728, out_features=1),
-                nn.Sigmoid()
             )
         elif num_fc == 2:
             self.predict_layer = nn.Sequential(
                 nn.Linear(in_features=728, out_features=fc_dim),
                 nn.Linear(in_features=fc_dim, out_features=1),
-                nn.Sigmoid()
             )
         else:
             raise ValueError('Check Variable <num_fc>')
+
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
         # SepConvBlock #1
@@ -263,7 +263,7 @@ class Discrimination_Network(nn.Module):
         x = x.view((-1, x.shape[1]))
         output = self.predict_layer(x)
 
-        return output
+        return self.sigmoid(output)
 
 
 class Model(nn.Module):
