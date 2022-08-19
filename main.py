@@ -5,7 +5,7 @@ import math
 import numpy as np
 import pandas as pd
 from sklearn.metrics import roc_auc_score, average_precision_score, f1_score, recall_score
-
+import time
 from model import *
 from utils import *
 
@@ -13,14 +13,15 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Argument and global variables
 parser = argparse.ArgumentParser('Interface')
-parser.add_argument('--patch_size', type=int, default=32, help='patch size')
-parser.add_argument('--ol_ratio', type=float, default=0.5, help='overlapping ratio')
 
 parser.add_argument('--n_epoch', type=int, default=50, help='number of epochs')
 parser.add_argument('--batch_size', type=int, default=128, help='batch_size')
 parser.add_argument('--lr', type=float, default=3e-4, help='learning rate')
 parser.add_argument('--num_fc', type=int, default=1, choices=[1, 2], help='# of fully-connected layer')
 parser.add_argument('--fc_dim', type=int, default=32, help='fully-connected layer dimension')
+
+parser.add_argument('--patch_size', type=int, default=32, help='patch size')
+parser.add_argument('--ol_ratio', type=float, default=0.5, help='overlapping ratio')
 parser.add_argument('--max_round', type=int, default=10, help='max round for early stopper')
 
 try:
@@ -30,21 +31,23 @@ except:
     parser.print_help()
     sys.exit(0)
 
-PATCH_SIZE = args.patch_size
-OL_RATIO = args.ol_ratio
-NUM_EPOCH = args.n_epoch
 BATCH_SIZE = args.batch_size
 LEARNING_RATE = args.lr
 NUM_FC = 1
 FC_DIM = None
+PATCH_SIZE = args.patch_size
+OL_RATIO = args.ol_ratio
+
+NUM_EPOCH = args.n_epoch
 MAX_ROUND = args.max_round
 
 MODEL_NAME = f'{BATCH_SIZE}-{LEARNING_RATE}-{NUM_FC}-{FC_DIM}-{PATCH_SIZE}-{OL_RATIO}'
+MODEL_NAME = '0'.zfill(3)
 MODEL_SAVE_PATH = f'./saved_models/{MODEL_NAME}.pth'
 get_checkpoint_path = lambda \
     epoch: f'./saved_checkpoints/{MODEL_NAME}-{epoch}.pth'
 
-MODEL_PERFORMANCE_PATH = f'./saved_models/model_perfomance_eval.csv'
+MODEL_PERFORMANCE_PATH = f'./saved_models/model_perfomance_eval_{MODEL_NAME}.csv'
 
 model = Model(num_fc=NUM_FC,
               fc_dim=FC_DIM
@@ -77,7 +80,7 @@ def eval_one_epoch(model, val_images, val_forgery_box, data_saving):
 
         for k in range(num_batch):
             s_idx = k * BATCH_SIZE
-            e_idx = min(num_instance - 1, s_idx + BATCH_SIZE)
+            e_idx = min(num_instance, s_idx + BATCH_SIZE)
 
             patch_cut = patch_indices[s_idx:e_idx]
             target_patches = patches[patch_cut]
@@ -99,11 +102,13 @@ def eval_one_epoch(model, val_images, val_forgery_box, data_saving):
     AUC = np.mean(auc)
     RECALL = np.mean(recall)
 
-
     if data_saving:
-        new = [{'NUM_FC': NUM_FC,
+        new = [{'BATCH_SIZE': BATCH_SIZE,
+                'LR': LEARNING_RATE,
+                'NUM_FC': NUM_FC,
                 'FC_DIM': FC_DIM,
-                'NUM_GRAPH': len(id_l),
+                'PATCH_SIZE' : PATCH_SIZE,
+                'OL_RATIO' : OL_RATIO,
                 'ACCURACY': ACC,
                 'AUC_ROC_SCORE': AUC,
                 'AP_SCORE': AP,
@@ -117,7 +122,6 @@ def eval_one_epoch(model, val_images, val_forgery_box, data_saving):
             updated_model.to_csv(MODEL_PERFORMANCE_PATH)
         except:
             new_model.to_csv(MODEL_PERFORMANCE_PATH)
-
 
     return ACC, AP, F1, AUC, RECALL
 
@@ -133,11 +137,10 @@ def run():
     train_images, train_forgery_box = images[train_indices], forgery_box[train_indices]
     val_images, val_forgery_box = images[val_indices], forgery_box[val_indices]
 
-    print(f'Num Images : {num_data}')
-    print(f'Train Images : {len(train_images)}')
-    print(f'Val Images : {len(val_images)}')
+    print(f'Num Images : {num_data} | Train : {len(train_images)} | Val : {len(val_images)}')
 
     for epoch in range(NUM_EPOCH):
+        start = time.time()
         acc, ap, f1, auc, recall, m_loss = [], [], [], [], [], []
         images_cut, forgery_box_cut = random_shuffle(train_images, train_forgery_box)
 
@@ -152,7 +155,7 @@ def run():
 
             for k in range(num_batch):
                 s_idx = k * BATCH_SIZE
-                e_idx = min(num_instance - 1, s_idx + BATCH_SIZE)
+                e_idx = min(num_instance, s_idx + BATCH_SIZE)
 
                 patch_cut = patch_indices[s_idx:e_idx]
                 target_patches = patches[patch_cut]
@@ -175,8 +178,9 @@ def run():
                     auc.append(roc_auc_score(true_label, pred_prob))
                     recall.append(recall_score(true_label, pred_label))
 
-        val_acc, val_ap, val_f1, val_auc, val_recall = eval_one_epoch(model, val_images, val_forgery_box, 1)
-        print(f'epoch : {epoch}')
+        val_acc, val_ap, val_f1, val_auc, val_recall = eval_one_epoch(model, val_images, val_forgery_box, 0)
+        print(f'MODEL NAME : {MODEL_NAME} | epoch : {epoch}, | '
+              f'avg_time : {(time.time()-start)/(len(images_cut)*60):.3f}min')
         print(f'Epoch mean loss: {np.mean(m_loss)}')
         print(f'train acc: {np.mean(acc)}, val acc: {val_acc}')
         print(f'train auc: {np.mean(auc)}, val auc: {val_auc}')
@@ -205,6 +209,7 @@ def run():
                     except:
                         continue
 
+    val_acc, val_ap, val_f1, val_auc, val_recall = eval_one_epoch(model, val_images, val_forgery_box, 1)
     print('Saving model')
     torch.save(model.state_dict(), MODEL_SAVE_PATH)
     print('Models saved')
