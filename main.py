@@ -47,12 +47,14 @@ MODEL_SAVE_PATH = f'./saved_models/{MODEL_NAME}.pth'
 get_checkpoint_path = lambda \
     epoch: f'./saved_checkpoints/{MODEL_NAME}-{epoch}.pth'
 
-MODEL_PERFORMANCE_PATH = f'./saved_models/model_perfomance_eval_{MODEL_NAME}.csv'
+MODEL_PERFORMANCE_PATH = f'./saved_models/model_perfomance_eval.csv'
 
 model = Model(num_fc=NUM_FC,
               fc_dim=FC_DIM
               )
 model.to(device)
+for param in model.CFEN.preprocessing.parameters():
+    param.requires_grad = False
 optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 criterion = torch.nn.BCELoss()
 early_stopper = EarlyStopMonitor(MAX_ROUND)
