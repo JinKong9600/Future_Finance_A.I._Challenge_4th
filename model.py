@@ -133,7 +133,7 @@ class CFEN_preprocess(nn.Module):
 class Correlation_Feature_Extraction_Network(nn.Module):
     def __init__(self):
         super().__init__()
-        self.preprocessing = CFEN_preprocess().requires_grad_(False)
+        self.preprocessing = CFEN_preprocess()
         self.Sequential_Conv_1 = nn.Sequential(
             BasicConv2d(6, 16, kernel_size=3, stride=1, padding=1),
             BasicConv2d(16, 16, kernel_size=3, stride=1, padding=1)
