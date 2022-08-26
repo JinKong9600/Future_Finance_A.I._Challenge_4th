@@ -244,6 +244,21 @@ class Discrimination_Network(nn.Module):
                 nn.Linear(in_features=728, out_features=fc_dim),
                 nn.Linear(in_features=fc_dim, out_features=1),
             )
+
+        elif num_fc == 3:
+            self.predict_layer = nn.Sequential(
+                nn.Linear(in_features=728, out_features=80),
+                nn.Linear(in_features=80, out_features=8),
+                nn.Linear(in_features=8, out_features=1),
+            )
+
+        elif num_fc == 4:
+            self.predict_layer = nn.Sequential(
+                nn.Linear(in_features=728, out_features=125),
+                nn.Linear(in_features=125, out_features=25),
+                nn.Linear(in_features=25, out_features=5),
+                nn.Linear(in_features=5, out_features=1),
+            )
         else:
             raise ValueError('Check Variable <num_fc>')
 
