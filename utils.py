@@ -187,7 +187,7 @@ class Discriminate():
 
         return self.mask
 
-def visualize(img_p, narr, prob, mask):
+def visualize(img_p, narr, prob, mask, save):
     img_p = img_p.replace('/', '_')
     save_path = f'./saved_outputs/{img_p}'
     print(narr.shape)
@@ -199,12 +199,12 @@ def visualize(img_p, narr, prob, mask):
     plt.subplot(1, 3, 2)
     plt.imshow(mask*225)
     plt.title('MASK')
-    # plt.savefig(f'{save_path}_mask.png')
 
     plt.subplot(1, 3, 3)
     plt.imshow(torch.mul(narr, mask).permute(1, 2, 0))
     plt.title('MASKED IMG')
-    # plt.savefig(f'{save_path}_masked_img.png')
+    if save:
+        plt.savefig(f'{save_path}_output.png')
     plt.show()
 
 

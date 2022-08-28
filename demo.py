@@ -14,7 +14,6 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Argument and global variables
 parser = argparse.ArgumentParser('Interface')
-
 parser.add_argument('--n_epoch', type=int, default=50, help='number of epochs')
 parser.add_argument('--batch_size', type=int, default=128, help='batch_size')
 parser.add_argument('--lr', type=float, default=3e-4, help='learning rate')
@@ -48,7 +47,7 @@ TH = args.th
 
 test_list = pd.read_csv('test_list.csv', index_col=0)
 
-MODEL_NUM = 11
+MODEL_NUM = 0
 
 spec = test_list.loc[MODEL_NUM]
 BATCH_SIZE, LEARNING_RATE, NUM_FC, FC_DIM, PATCH_SIZE, OL_RATIO = spec[:]
@@ -102,7 +101,7 @@ def demo(model, images, visualizing):
         output = discriminator.score().cpu()
 
         if visualizing:
-            visualize(img_p, narrow_img, _, output)
+            visualize(img_p, narrow_img, _, output, 1)
 
 
 if __name__ == '__main__':
