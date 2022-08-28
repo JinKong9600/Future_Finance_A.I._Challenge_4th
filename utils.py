@@ -190,8 +190,6 @@ class Discriminate():
 def visualize(img_p, narr, prob, mask, save):
     img_p = img_p.replace('/', '_')
     save_path = f'./saved_outputs/{img_p}'
-    print(narr.shape)
-    print(mask.shape)
     plt.subplot(1, 3, 1)
     plt.imshow(narr.permute(1, 2, 0))
     plt.title('Adjusted Image')
@@ -205,6 +203,7 @@ def visualize(img_p, narr, prob, mask, save):
     plt.title('MASKED IMG')
     if save:
         plt.savefig(f'{save_path}_output.png')
+        print(f'saved {save_path}_output.png')
     plt.show()
 
 
