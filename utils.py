@@ -188,22 +188,29 @@ class Discriminate():
         return self.mask
 
 def visualize(img_p, narr, prob, mask, save):
-    img_p = img_p.replace('/', '_')
+    img_p = img_p.replace('/', '_').rstrip('.jpg')
     save_path = f'./saved_outputs/{img_p}'
     plt.subplot(1, 3, 1)
     plt.imshow(narr.permute(1, 2, 0))
-    plt.title('Adjusted Image')
+    plt.title('Adjusted Image', fontsize=10)
+    plt.axis('off')
 
     plt.subplot(1, 3, 2)
-    plt.imshow(mask*225)
-    plt.title('MASK')
+    plt.imshow(mask, cmap='gray')
+    plt.title('MASK', fontsize=10)
+    plt.axis('off')
 
     plt.subplot(1, 3, 3)
     plt.imshow(torch.mul(narr, mask).permute(1, 2, 0))
-    plt.title('MASKED IMG')
+    plt.title('MASKED IMG', fontsize=10)
+    plt.axis('off')
     if save:
-        plt.savefig(f'{save_path}_output.png')
-        print(f'saved {save_path}_output.png')
+        plt.savefig(f'{save_path}_output.png',
+                    bbox_inches='tight',
+                    pad_inches=0.5,
+                    facecolor='#eeeeee',
+                    dpi=600)
+        print(f'Saved {img_p}_output.png')
     plt.show()
 
 
